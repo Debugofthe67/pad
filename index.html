@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>macOS App Launcher</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2560') no-repeat center center fixed;
+            background-size: cover;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* LIQUID GLASS BACKGROUND */
+        .liquid-glass-backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(0, 0, 0, 0.2) 100%);
+            backdrop-filter: blur(50px) saturate(210%);
+            -webkit-backdrop-filter: blur(50px) saturate(210%);
+            filter: url(#liquid-glass-distortion);
+            box-shadow: inset 0 0 120px rgba(255, 255, 255, 0.15);
+            z-index: 1;
+        }
+
+        /* INTERFACE CONTAINER */
+        .launchpad-container {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 8%;
+            overflow-y: auto;
+        }
+
+        /* Search Bar styling */
+        .search-container {
+            margin-bottom: 50px;
+            width: 100%;
+            max-width: 320px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .search-bar {
+            width: 100%;
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-size: 15px;
+            text-align: center;
+            outline: none;
+            backdrop-filter: blur(15px);
+            transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.15), inset 0 1px 1px rgba(255,255,255,0.2);
+        }
+
+        .search-bar::placeholder {
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        .search-bar:focus {
+            background: rgba(255, 255, 255, 0.25);
+            text-align: left;
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3), 0 0 0 4px rgba(255,255,255,0.15);
+        }
+
+        /* App Grid Layout */
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 100px));
+            grid-gap: 44px 32px;
+            justify-content: center;
+            width: 100%;
+            max-width: 1400px;
+            padding-bottom: 60px;
+        }
+
+        /* App Icon Module */
+        .app-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-decoration: none;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .app-item:hover {
+            transform: scale(1.08);
+        }
+
+        .app-item:active {
+            transform: scale(0.94);
+        }
+
+        /* macOS App Icon geometry */
+        .icon-wrapper {
+            width: 76px;
+            height: 76px;
+            border-radius: 17px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.3);
+            margin-bottom: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .icon-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Labels */
+        .app-name {
+            font-size: 12.5px;
+            font-weight: 400;
+            letter-spacing: 0.2px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+        }
+
+        .app-item.hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <svg style="display: none;">
+        <filter id="liquid-glass-distortion" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves="2" result="noise" seed="5" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="25" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+    </svg>
+
+    <div class="liquid-glass-backdrop"></div>
+
+    <div class="launchpad-container">
+        <div class="search-container">
+            <input type="text" class="search-bar" placeholder="Search" id="searchBox" oninput="filterLauncherApps()">
+        </div>
+
+        <div class="app-grid" id="appGrid">
+            </div>
+    </div>
+
+    <script>
+        // Full list of 60 exact apps updated with their native Apple Bundle IDs
+        const appsData = [
+            { name: "FaceTime", url: "facetime://", icon: "com.apple.FaceTime" },
+            { name: "Calendar", url: "x-apple-calendar://", icon: "com.apple.iCal" },
+            { name: "Photos", url: "photos-redirect://", icon: "com.apple.Photos" },
+            { name: "Maps", url: "maps://", icon: "com.apple.Apps.Maps" },
+            { name: "Notes", url: "mobilenotes://", icon: "com.apple.Notes" },
+            { name: "Reminders", url: "x-apple-reminders://", icon: "com.apple.Reminders" },
+            { name: "Music", url: "music://", icon: "com.apple.Music" },
+            { name: "Podcasts", url: "pcast://", icon: "com.apple.podcasts" },
+            { name: "App Store", url: "macappstore://", icon: "com.apple.AppStore" },
+            { name: "Mail", url: "message://", icon: "com.apple.mail" },
+            { name: "Finder", url: "fnd://", icon: "com.apple.finder" },
+            { name: "Safari", url: "http://", icon: "com.apple.Safari" },
+            { name: "Messages", url: "sms://", icon: "com.apple.MobileSMS" },
+            { name: "Contacts", url: "addressbook://", icon: "com.apple.AddressBook" },
+            { name: "TV", url: "videos://", icon: "com.apple.TV" },
+            { name: "Books", url: "ibooks://", icon: "com.apple.iBooksX" },
+            { name: "News", url: "applenews://", icon: "com.apple.news" },
+            { name: "Stocks", url: "stocks://", icon: "com.apple.stocks" },
+            { name: "Weather", url: "weather://", icon: "com.apple.weather" },
+            { name: "Voice Memos", url: "voicememos://", icon: "com.apple.VoiceMemos" },
+            { name: "Home", url: "x-apple-home://", icon: "com.apple.Home" },
+            { name: "Find My", url: "findmy://", icon: "com.apple.findmy" },
+            { name: "Files", url: "shareddocuments://", icon: "com.apple.DocumentsApp" },
+            { name: "Settings", url: "x-apple.systempreferences://", icon: "com.apple.systempreferences" },
+            { name: "Calculator", url: "calculator://", icon: "com.apple.calculator" },
+            { name: "Clock", url: "clock://", icon: "com.apple.clock" },
+            { name: "Dictionary", url: "dict://", icon: "com.apple.Dictionary" },
+            { name: "Freeform", url: "freeform://", icon: "com.apple.freeform" },
+            { name: "TextEdit", url: "textedit://", icon: "com.apple.TextEdit" },
+            { name: "Photo Booth", url: "photobooth://", icon: "com.apple.PhotoBooth" },
+            { name: "Preview", url: "preview://", icon: "com.apple.Preview" },
+            { name: "QuickTime", url: "quicktime://", icon: "com.apple.QuickTimePlayerX" },
+            { name: "Terminal", url: "terminal://", icon: "com.apple.Terminal" },
+            { name: "Activity Monitor", url: "activitymonitor://", icon: "com.apple.ActivityMonitor" },
+            { name: "Disk Utility", url: "diskutility://", icon: "com.apple.DiskUtility" },
+            { name: "Keychain Access", url: "keychain://", icon: "com.apple.keychainaccess" },
+            { name: "Automator", url: "automator://", icon: "com.apple.Automator" },
+            { name: "Shortcuts", url: "shortcuts://", icon: "com.apple.Shortcuts" },
+            { name: "Grapher", url: "grapher://", icon: "com.apple.Grapher" },
+            { name: "Digital Color Meter", url: "digitalcoloreter://", icon: "com.apple.DigitalColorMeter" },
+            { name: "Audio MIDI Setup", url: "audiomidisetup://", icon: "com.apple.AudioMIDISetup" },
+            { name: "ColorSync Utility", url: "colorsync://", icon: "com.apple.ColorSyncUtility" },
+            { name: "Migration Assistant", url: "migrationassistant://", icon: "com.apple.MigrateAssistant" },
+            { name: "System Information", url: "systeminformation://", icon: "com.apple.SystemProfiler" },
+            { name: "Font Book", url: "fontbook://", icon: "com.apple.FontBook" },
+            { name: "Boot Camp Assistant", url: "bootcamp://", icon: "com.apple.BootCampAssistant" },
+            { name: "Screen Time", url: "screentime://", icon: "com.apple.ScreenTimeUI" },
+            { name: "GarageBand", url: "garageband://", icon: "com.apple.garageband10" },
+            { name: "iMovie", url: "imovie://", icon: "com.apple.iMovieApp" },
+            { name: "Pages", url: "pages://", icon: "com.apple.Pages" },
+            { name: "Numbers", url: "numbers://", icon: "com.apple.Numbers" },
+            { name: "Keynote", url: "keynote://", icon: "com.apple.Keynote" },
+            { name: "Xcode", url: "xcode://", icon: "com.apple.dt.Xcode" },
+            { name: "MainStage", url: "mainstage://", icon: "com.apple.MainStage3" },
+            { name: "Logic Pro", url: "logicpro://", icon: "com.apple.logic10" },
+            { name: "Final Cut Pro", url: "finalcut://", icon: "com.apple.FinalCut" },
+            { name: "TestFlight", url: "itms-beta://", icon: "com.apple.TestFlight" },
+            { name: "Swift Playgrounds", url: "swiftplaygrounds://", icon: "com.apple.Playgrounds" },
+            { name: "Configurator", url: "appleconfigurator://", icon: "com.apple.configurator.ui" },
+            { name: "Remote Desktop", url: "remotedesktop://", icon: "com.apple.RemoteDesktop" }
+        ];
+
+        const gridElement = document.getElementById('appGrid');
+
+        appsData.forEach(app => {
+            const anchor = document.createElement('a');
+            anchor.href = app.url;
+            anchor.className = 'app-item';
+
+            // Pointing directly to your local bundle ID file inside 'icons/' folder
+            const localSrc = `icons/${app.icon}.png`;
+
+            anchor.innerHTML = `
+                <div class="icon-wrapper">
+                    <img src="${localSrc}" alt="${app.name}" onerror="this.onerror=null; this.src='https://g.deno.dev/gh/vanyatb/macos-icons/icons/App%20Store.png';">
+                </div>
+                <span class="app-name">${app.name}</span>
+            `;
+            gridElement.appendChild(anchor);
+        });
+
+        // Search optimization logic
+        function filterLauncherApps() {
+            const query = document.getElementById('searchBox').value.toLowerCase().trim();
+            const items = document.getElementsByClassName('app-item');
+            
+            for (let i = 0; i < items.length; i++) {
+                const title = items[i].querySelector('.app-name').innerText.toLowerCase();
+                if (title.includes(query)) {
+                    items[i].classList.remove('hidden');
+                } else {
+                    items[i].classList.add('hidden');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
